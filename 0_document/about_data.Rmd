@@ -1,0 +1,14 @@
+---
+title: "Untitled"
+author: "bill Chung"
+date: '2022-06-01'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, fig.align='center', out.width="100%", fig.cap="DNA"}
+# knitr::include_graphics("fig/1.JPG")
+```

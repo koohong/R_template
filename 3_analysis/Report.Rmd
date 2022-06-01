@@ -1,0 +1,35 @@
+---
+title: "Report"
+author: "your name"
+date: \today
+output: 
+  html_document:
+    css: "style.css"
+    toc: true
+    toc_depth: 3
+    toc_float: 
+      collapsed: false
+      smooth_scroll: false
+      number_sections: true
+      fig_caption: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	fig.width=12, 
+	fig.height=8
+)
+s <- Sys.time()
+source("r/get_lib.R")
+```
+
+# Overall statistics
+
+```{r cars}
+
+```
