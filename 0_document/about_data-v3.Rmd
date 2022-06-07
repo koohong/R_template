@@ -19,16 +19,17 @@ library(MASS)
 library(stargazer)
 library(data.table)
 library(knitr)
+#library(glmnet)
 
 # Title   : Preprocess Korean to English
 # Subject : Analyzing traffic accidents involving pedestrians using hierarchical model 
 # Author : Seong-jong Woo
 
-path <- paste0("E:/Severity/forGithub/R_template/")
-rawPath <- paste0(path,"1_raw_data/")
+path <- paste0("E:/Severity/R_template/")
+rawPath <- paste0(path,"1_raw_data/old/")
 analysisPath <- paste0(path,"3_analysis/r/")
 
-#source(paste0(analysisPath,"get_lib.R"))
+# source(paste0(analysisPath,"get_lib.R"))
 
 options(scipen = 100)
 
@@ -73,7 +74,7 @@ for(i in 1:nrow(popByAge_contents)){
   popByAge$contents[(popByAge$contents %in% popByAge_contents$contents[i])] <- popByAge_contents$ID[i]
 }
 
-saveRDS(popByAge,paste0(rawPath,"population_by_age_2016.rds"))
+# saveRDS(popByAge,paste0(rawPath,"population_by_age_2016.rds"))
 
 
 #########################################################################################################################
@@ -95,7 +96,7 @@ for(i in 1:nrow(popByAge_District)){
   roadWidth$district[(roadWidth$district %in% popByAge_District$district[i])] <- popByAge_District$ID[i]
 }
 
-saveRDS(roadWidth,paste0(rawPath,"road_width_2016.rds"))
+# saveRDS(roadWidth,paste0(rawPath,"road_width_2016.rds"))
 
 #########################################################################################################################
 
@@ -115,7 +116,7 @@ for(i in 1:nrow(popByAge_State)){
 for(i in 1:nrow(popByAge_District)){
   useDistrict$district[(useDistrict$district %in% popByAge_District$district[i])] <- popByAge_District$ID[i]
 }
-useDistrict_descTable
+
 ## Column 4.type
 
 useDistrict_Type <- data.frame(ID = c("total_zone","zone1","zone11","zone12","zone13","zone14","zone15","zone16","zone17","zone18","zone2","zone21","zone22","zone23","zone24","zone3","zone31","zone32","zone33","zone4","zone41","zone42","zone43","zone5"), TypeEng = c("urban_area","residential_area","total_exclusive_residential_area","class1_exclusive_residential_area","class2_exclusive_residential_area","total_general_residential_area","class1_general_residential_area","class2_general_residential_area","class3_general_residential_area","quasi_residential_area","commercial_area","central_commercial_area","general_commercial_area","neighboring_commercial_area","circulative_commercial_area","industrial_area","exclusive_industrial_area","general_industrial_area","quasi_industrial_area","green_area","green_conservation_area","green_natural_area","green_production_area","not_clssified_area"), TypeKor = (unique(useDistrict$type)))
@@ -129,7 +130,7 @@ for(i in 1:nrow(useDistrict_Type)){
 useDistrict$contents[(useDistrict$contents %in% "면적")] <- "area"
 useDistrict$contents[(useDistrict$contents %in% "비율")] <- "ratio"
 
-saveRDS(useDistrict,paste0(rawPath,"use_district_2016_2020.rds"))
+# saveRDS(useDistrict,paste0(rawPath,"use_district_2016_2020.rds"))
 
 #########################################################################################################################
 
@@ -165,7 +166,7 @@ for(i in 1:nrow(popByAge_District)){
 }
 
 
-saveRDS(emergencyMedical,paste0(rawPath,"emergency_medical_2016-rvsd.rds"))
+# saveRDS(emergencyMedical,paste0(rawPath,"emergency_medical_2016-rvsd.rds"))
 
 #########################################################################################################################
 
@@ -338,49 +339,35 @@ for(i in 1:nrow(pedestrianAccident_weather)){
 }
 
 
-saveRDS(pedestrianAccident,paste0(rawPath,"accident_2016_2020.rds"))
+# saveRDS(pedestrianAccident,paste0(rawPath,"accident_2016_2020.rds"))
+
 
 ```
 
 
 ```{r, echo=FALSE, fig.align='center', out.width="100%", fig.cap="DNA"}
 
-# 3.use district_type
+# use district_type
 
 District_description <- data.frame(description = c("","","An area required for protecting favorable residential environments","An area required for protecting favorable residential environments centered around independent housing","An area required for protecting favorable residential environments centered around multi-unit housing","An area required for creating convenient residential environments","An area required for creating convenient residential environments centered around low-floor housing","An area required for creating convenient residential environments centered around mid-floor housing","An area required for creating convenient residential environments centered around mid- and high-floor housing","An area required for supplementing a part of the commercial function and business functions to support it by centering around residential function", "","An area required for expanding the commercial and business functions in the center and subcenter of a metropolis","An area required for the general commercial function and business function","An area required for supplying the daily necessities and services in the neighboring area","An area required for increasing the circulation function in the city and between the areas","","An area required for admitting mainly the heavy chemical industry, pollutive industries, etc.","An area required for allocating the industry not impeditive to the environments","An area for admitting the light industry and other industries, but in need of supplementing the residential, commercial functions and business function","","An area requiring conservation of natural environment, scenery, forest and green areas in the city","An area requiring reservation on development for the main purpose of agricultural production","n area requiring preservation for securing green area space, prevention of city's expansion, supply of future city sites, etc., in which restrictive development is allowed for only inevitable cases.","unclassified area"))
 
 useDistrict_descTable <- cbind(useDistrict_Type[,-3],District_description)
+colnames(useDistrict_descTable)[1] <- "type"
+
 kable(useDistrict_descTable,caption = "Description type(zone) column in use district")
 
-
-########## 작업해야함
-
-# 4.emergencyMedical
-
-## medical_institution_type
-
-# emergencyMedical$medical_institution_type
-
-# emergencyMedical_type1
-
-## emergency_medical_institution_type
-
-# emergencyMedical$emergency_medical_institution_type
-
-# emergencyMedical_type2
-
-
-# 5. pedestrian accident
-
+# Pedestrian accident
 ## severity
-pedestrianAccident_severity
 
-severity_description <- data.frame(description = c("an injury requiring treatment for at least three weeks","an injury requiring treatment for more than 5 days and less than 3 weeks","an injury requiring treatment for less than 5 days","the case of death within 30 days of the occurrence of a traffic accident", "no injury requireing treatment for", "unidentified"))
+severity_description <- data.frame(description = c("an injury requiring at least three weeks of treatment","an injury requiring treatment for not less than five days but not more than three weeks","an injury requiring less than five days of treatment","death within 30 days of the occurrence of a traffic accident","no injury","unidendified"))
 
 severity_descTable <- cbind(pedestrianAccident_severity[,-2],severity_description)
+colnames(severity_descTable)[1] <- "severity"
+
 kable(severity_descTable,caption = "Description severity column in pedestrian accident")
 
 
 ##
+
 
 ```
