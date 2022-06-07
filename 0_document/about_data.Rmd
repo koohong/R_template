@@ -2,13 +2,123 @@
 title: "Untitled"
 author: "bill Chung"
 date: '2022-06-01'
-output: pdf_document
+output: html_document
 ---
 
-```{r setup, include=FALSE}
+```{r,error=FALSE,echo=FALSE,results='hide',warning=FALSE,message=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r, echo=FALSE, fig.align='center', out.width="100%", fig.cap="DNA"}
+
+```{r, echo=FALSE, fig.align='center', out.width="100%", fig.cap="DNA",results='hide',warning=FALSE,message=FALSE}
 # knitr::include_graphics("fig/1.JPG")
+library(lme4)
+library(lmerTest)
+library(dplyr)
+library(MASS)
+library(stargazer)
+library(data.table)
+library(knitr)
+#library(glmnet)
+
+
+path <- paste0("E:/Severity/forGithub/R_template/")
+rawPath <- paste0(path,"1_raw_data/")
+analysisPath <- paste0(path,"3_analysis/r/")
+# 
+# source(paste0(analysisPath,"get_lib.R"))
+
+options(scipen = 100)
+
+# 1. population by age
+
+popByAge <- fread(paste0(rawPath,"population_by_age_2016.csv"))
+
+colnames(popByAge) <- c("states","delete","district","age","contents","2016")
+popByAge <- popByAge[,-2]
+
+
+## Column 1. States
+states <- c("a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q")
+popByAge_State <- data.frame(ID = states, states = unique(popByAge$states))
+
+for(i in 1:nrow(popByAge_State)){
+  popByAge$states[(popByAge$states %in% popByAge_State$states[i])] <- popByAge_State$ID[i]
+}
+
+## Column 2. District
+district <- 1:length(unique(popByAge$district))
+popByAge_District <- data.frame(ID = district, district = unique(popByAge$district))
+
+for(i in 1:nrow(popByAge_District)){
+  popByAge$district[(popByAge$district %in% popByAge_District$district[i])] <- popByAge_District$ID[i]
+}
+
+## Column 3. Delete
+## Column 4. Age
+
+popByAge_Age <- data.frame(ID = c("total","0~4","5~9","10~14","15~19","20~24","25~29","30~34","35~39","40~44","45~49","50~54","55~59","60~64","65~69","70~74","75~79","80~84","over_85","85~89","90~94","95~99","over_100","under_15","15~64","over_65","average","median"), age = (unique(popByAge$age)))
+
+for(i in 1:nrow(popByAge_Age)){
+  popByAge$age[(popByAge$age %in% popByAge_Age$age[i])] <- popByAge_Age$ID[i]
+}
+
+## Column 4.Contents
+
+popByAge_contents <- data.frame(ID = c("total","male","female","gender_ratio","native_total","native_male","native_female","native_gender_ratio"), contents = (unique(popByAge$contents)))
+
+for(i in 1:nrow(popByAge_contents)){
+  popByAge$contents[(popByAge$contents %in% popByAge_contents$contents[i])] <- popByAge_contents$ID[i]
+}
+
+saveRDS(popByAge,paste0(rawPath,"population_by_age_2016.rds"))
+
+
+
+
+# 3. use district
+
+useDistrict <- fread(paste0(rawPath,"use_district_2016_2020.csv"))
+
+colnames(useDistrict) <- c("states","delete","district","type","contents","unit","2016","2017","2018","2019","2020")
+useDistrict <- useDistrict[,-2]
+
+## Column 1. States
+for(i in 1:nrow(popByAge_State)){
+  useDistrict$states[(useDistrict$states %in% popByAge_State$states[i])] <- popByAge_State$ID[i]
+}
+
+## Column 2. District
+for(i in 1:nrow(popByAge_District)){
+  useDistrict$district[(useDistrict$district %in% popByAge_District$district[i])] <- popByAge_District$ID[i]
+}
+
+## Column 4.type
+
+useDistrict_Type <- data.frame(ID = c("total_zone","zone1","zone11","zone12","zone13","zone14","zone15","zone16","zone17","zone18","zone2","zone21","zone22","zone23","zone24","zone3","zone31","zone32","zone33","zone4","zone41","zone42","zone43","zone5"), TypeEng = c("urban_area","residential_area","total_exclusive_residential_area","class1_exclusive_residential_area","class2_exclusive_residential_area","total_general_residential_area","class1_general_residential_area","class2_general_residential_area","class3_general_residential_area","quasi_residential_area","commercial_area","central_commercial_area","general_commercial_area","neighboring_commercial_area","circulative_commercial_area","industrial_area","exclusive_industrial_area","general_industrial_area","quasi_industrial_area","green_area","green_conservation_area","green_natural_area","green_production_area","not_clssified_area"), TypeKor = (unique(useDistrict$type)))
+
+for(i in 1:nrow(useDistrict_Type)){
+  useDistrict$type[(useDistrict$type %in% useDistrict_Type$TypeKor[i])] <- useDistrict_Type$ID[i]
+}
+
+## Column 5.contents
+
+useDistrict$contents[(useDistrict$contents %in% "면적")] <- "area"
+useDistrict$contents[(useDistrict$contents %in% "비율")] <- "ratio"
+
+saveRDS(useDistrict,paste0(rawPath,"use_district_2016_2020.rds"))
+
+
+```
+
+
+```{r, echo=FALSE, fig.align='center', out.width="100%", fig.cap="DNA"}
+
+# use district_type
+
+District_description <- data.frame(description = c("","","An area required for protecting favorable residential environments","An area required for protecting favorable residential environments centered around independent housing","An area required for protecting favorable residential environments centered around multi-unit housing","An area required for creating convenient residential environments","An area required for creating convenient residential environments centered around low-floor housing","An area required for creating convenient residential environments centered around mid-floor housing","An area required for creating convenient residential environments centered around mid- and high-floor housing","An area required for supplementing a part of the commercial function and business functions to support it by centering around residential function", "","An area required for expanding the commercial and business functions in the center and subcenter of a metropolis","An area required for the general commercial function and business function","An area required for supplying the daily necessities and services in the neighboring area","An area required for increasing the circulation function in the city and between the areas","","An area required for admitting mainly the heavy chemical industry, pollutive industries, etc.","An area required for allocating the industry not impeditive to the environments","An area for admitting the light industry and other industries, but in need of supplementing the residential, commercial functions and business function","","An area requiring conservation of natural environment, scenery, forest and green areas in the city","An area requiring reservation on development for the main purpose of agricultural production","n area requiring preservation for securing green area space, prevention of city's expansion, supply of future city sites, etc., in which restrictive development is allowed for only inevitable cases.","unclassified area"))
+
+useDistrict_descTable <- cbind(useDistrict_Type[,-3],District_description)
+kable(useDistrict_descTable,caption = "Description type(zone) column in use district")
+
 ```

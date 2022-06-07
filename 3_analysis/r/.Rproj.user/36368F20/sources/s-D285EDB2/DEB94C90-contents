@@ -1,0 +1,1078 @@
+#Project : TRANSPORTATION AND LOGISTICS OPTIMIZATION
+#Subject : Single Hub Problem with UE Method
+#Method :Genetic Algorithm, Harmony Search Alhorithm
+#Network : sioux Falls
+#Network and Discrete Location, p-357
+#Update on : 2020-06-11
+#Code by : Seong-jong Woo
+
+
+rm(list=ls())
+
+options(scipen = 100)
+
+library(data.table)
+library(parallel)
+library(foreach)
+library(doParallel)
+
+#detectCores()
+#cl <- makeCluster(3)
+#registerDoParallel(cl)
+{
+  Compute_time <- Sys.time()
+  
+  time_limit <- 300  #1회 run당 30분
+  
+  sdate <- 200713
+  output_path <- paste0(getwd(),'/3-output/')
+  input_path <- paste0(getwd(),"/2-input/")
+  
+  raw_path <- paste0(getwd(),'/1-rawdata/')
+  rds_path <- paste0(getwd(),'/2-rds/')
+  
+  chk_path <- paste0(getwd(),'/4-check_point/')
+  net_Nm <- c('anaheim')#'siouxfalls
+  Nm_network <- "anaheim"#"siouxfalls"
+  
+  #net_list <- list.files(paste0(raw_path,'1-1_network'))
+  #demand_list <- list.files(paste0(raw_path,'1-2_demand'))
+  #dist_list <- list.files(paste0(raw_path,'1-3_distance'))
+  
+  n_net <- 1
+  
+  #BUILD NETWORK
+  #for(n_net in 1:length(net_list)){
+  {
+    
+    target_net <- readRDS(paste0(input_path,net_Nm,"_net.RDS"))
+    
+    target_net$link_status <- 1
+    
+    temp_node <- c(target_net$O,target_net$D)
+    
+    node <- unique(temp_node)
+    n_node <- length(node)
+    node_Nm <- 1:n_node
+    
+    
+    #Initiallize connection status by O-D
+    {
+      
+      link <- dcast(target_net, O ~ D,value.var = "link_status",fill = 0)
+      link <- link[,-1]
+      link <- as.matrix(link)
+      
+      if(sum(link)!=nrow(target_net)){
+        print(paste0("HAS ERROR IN LINK STATUS [DCAST()] :",net_Nm[n_net]))
+        break
+      }
+    }
+    
+    
+    #Installize Distance between each node
+    if(net_Nm != 'anaheim'){
+      distance <- dcast(target_net, O ~ D,value.var = "Length(Km)",fill = NA)
+      distance <- distance[,-1]
+      distance <- as.data.frame(distance)
+      
+      if(sum(distance,na.rm = T)!=sum(target_net$Length)){
+        print(paste0("HAS ERROR IN distance STATUS [DCAST()] :",net_Nm[n_net]))
+        break
+      }
+    }else if(net_Nm == 'anaheim'){
+      distance <- dcast(target_net, O ~ D,value.var = "Length",fill = NA)
+      distance <- distance[,-1]
+      distance <- as.data.frame(distance)
+      
+      if(sum(distance,na.rm = T)!=sum(target_net$Length)){
+        print(paste0("HAS ERROR IN distance STATUS [DCAST()] :",net_Nm[n_net]))
+        break
+      }
+    }
+    
+    
+    #Input : shortest distance for each node
+    
+    
+    if(sum(dir(input_path) %in% paste0(net_Nm[n_net],'_shortest_distance.RDS'))==1){
+      
+      shortest_distance <- readRDS(paste0(input_path,net_Nm,'_shortest_distance.RDS'))
+      
+    }else{
+      #Calculate Shortest path (Dijkstra's Algorithm)
+      shortest_distance <- matrix(nrow=n_node,ncol=n_node,Inf)
+      shortest_previous <- matrix(nrow=n_node,ncol=n_node,Inf)
+      shortest_flag <- matrix(nrow=n_node,ncol=n_node,Inf)
+      
+      ##Calculate shortest distance to all node from node i
+      for(i in 1:n_node){
+        
+        temp_attribute <- data.frame(distance=rep(Inf,n_node),previous=rep(Inf,n_node),flag=rep(0,n_node))
+        
+        presant_node <- i
+        temp_attribute$flag[presant_node] <- 2
+        temp_attribute$previous[presant_node] <- 0
+        temp_attribute$distance[presant_node] <- 0
+        
+        while(sum(temp_attribute$flag)!=2*n_node){
+          for(j in 1:n_node){
+            #1.only connected node 2. not the same node i 3.not the node that is confirmed
+            if((link[presant_node,j]==1)&(presant_node!=j)&(temp_attribute$flag[j]!=2)){
+              
+              temp_distance <- temp_attribute$distance[presant_node] + distance[presant_node,j]
+              
+              if(temp_distance<=temp_attribute$distance[j]){
+                
+                temp_attribute$distance[j] <- temp_distance
+                
+                
+                temp_attribute$flag[j] <- 1
+                
+                temp_attribute$previous[j] <- presant_node
+              }
+              
+            }#if((link[presant_node,j]==1)&(presant_node!=j)&(temp_attribute$flag[j]!=2)){
+          }#for(j in 1:n_node){
+          
+          min_which <- which(min(temp_attribute$distance[which(temp_attribute$flag==1)])==temp_attribute$distance)
+          
+          min_which <- min_which[temp_attribute$flag[min_which]!=2]
+          
+          if(length(min_which)!=1){
+            min_which <- min_which[1]
+          }
+          
+          
+          temp_attribute$flag[min_which] <- 2
+          
+          presant_node <- min_which
+          
+          rm(min_which)
+        }
+        
+        
+        shortest_distance[i,] <- temp_attribute$distance
+        shortest_previous[i,] <- temp_attribute$previous
+        shortest_flag[i,] <- temp_attribute$flag
+        
+        rm(temp_attribute)
+        
+        print(paste0( 'Process Done : ',i,' / ',n_node))
+        
+      }#for(i in 1:n_node){
+      
+      saveRDS(shortest_distance,file=paste0(input_path,net_Nm,'_shortest_distance.RDS'))
+      
+    }#Dijkstra's Algorithm
+    
+    #Input : Demand
+    ## extract by sum of assigned trip which are come from origin node(Origin SUM)
+    ### 'Chicago' network's node number 384 is NA, so demand table is not suitable distance table, Y table...
+    ### So REVISE Demand NA value  To 0 value
+    
+    Demand <- readRDS(paste0(input_path,net_Nm,'_trips.RDS'))
+    # <- data.frame(Demand)
+    #Demand <- data.frame(O=node)
+    #Demand <- merge(Demand,Demand_base,by = "O",all.x = T)
+    #Demand[is.na(Demand$demand),'demand'] <- 0
+    
+  }
+  
+  X_list <- NULL
+  
+  for(X_n in 1:n_node){
+    X_list <- c(X_list,paste0("X",X_n))
+  }
+  
+  rm(distance)
+  
+  #}
+}
+#---------------------------------------- General Code
+
+
+
+##2. Simple Genetic Algorithm##
+
+
+#Input : Construction cst($)
+Construction_cost_list <- c(3000000)#,1000000,5000000)
+
+#Input : Unit cost per minute(min) per demand($)
+Unit_cost_list <- c(0.5)
+
+#Constraint : Capacity per each Hub
+facility_capacity_list <- c(300000)#,100000,500000)
+
+n_runs <- 8
+n_iter <- 2000
+
+Pc_list <- c(0.5, 0.7,0.9)
+Pm_list <- c(0.05, 0.1)
+
+
+
+C.C<-1
+T.C<-1
+Pc<-1
+Pm<-1
+
+
+for(C.C in 1:length(Construction_cost_list)){
+  
+  Construction_cost <- Construction_cost_list[C.C]
+  facility_capacity <- facility_capacity_list[C.C]
+  
+  
+  #  for(T.C in 1:length(Unit_cost_list)){
+  for(Pc in 1:length(Pc_list)){
+    for(Pm in 1:length(Pm_list)){
+      
+      optimal_table <- data.frame(run = rep(NA,n_iter))
+      fitness_table <- data.frame(run = rep(NA,n_iter))
+      facility_table <- data.frame(run = rep(NA,n_iter))
+      construction_cost_table <- data.frame(run = rep(NA,n_iter))
+      transportation_cost_table <- data.frame(run = rep(NA,n_iter))
+      computationtime_table <- data.frame(run = rep(NA,n_iter))
+      
+      
+      
+      Unit_cost <- Unit_cost_list[T.C]
+      
+      p_crossover <- Pc_list[Pc]
+      p_mutation <- Pm_list[Pm]
+      
+      n_size <- 10
+      
+      #############
+      ##run Start##
+      #############
+      
+      #runs <-1
+      for(runs in 1 : n_runs){
+        
+        start_time <- NULL
+        end_time <- NULL
+        
+        start_time <- Sys.time()
+        end_time <- Sys.time()
+        
+        local_best_fitness <- 0
+        local_bset_facility <- NA
+        local_best_construction <- 0
+        local_best_transportation <- 0
+        
+        temp_optimal_table <- data.frame(run = rep(NA,n_iter))
+        temp_fitness_table <- data.frame(run = rep(NA,n_iter))
+        temp_facility_table <- data.frame(run = rep(NA,n_iter))
+        temp_construction_cost_table <- data.frame(run = rep(NA,n_iter))
+        temp_transportation_cost_table <- data.frame(run = rep(NA,n_iter))
+        
+        temp_computationtime_table <- data.frame(run = rep(NA,n_iter))
+        
+        
+        
+        # INITIALLIZE POPULATION
+        ## 최초 Population 발생
+        
+        # Input random probability to each factors
+        ## 랜덤한 확률로 Facility 입지
+        pop_base <- data.frame(id=c(1:n_size))
+        
+        for(n_col in 1:n_node){
+          pop_base[,paste0("X",n_col)] <- runif(n_size,0,1)
+        }
+        
+        n_pop <- nrow(pop_base)
+        
+        ### 용량 제약조건 성립 확인
+        for(cur_pop in 1: n_pop){
+          
+          #Change probability to node Number
+          pop_base[cur_pop,-1][,which(pop_base[cur_pop,-1]>=0.5)] <- 1
+          pop_base[cur_pop,-1][,which(pop_base[cur_pop,-1]<0.5)] <- 0
+          
+          
+          # Valid Capacity Constraint & Add Shortage Number Of Facility
+          # 전체 Demand에 대해 Facility의 Capacity가 부족한 경우, 임의의 Facility를 추가하도록 함
+          
+          if(sum(pop_base[cur_pop,-1]) < ceiling(sum(Demand$demand)/facility_capacity)){
+            
+            shortage_facility <- ceiling(sum(Demand$demand)/facility_capacity) - sum(as.matrix(pop_base[cur_pop,-1][,(pop_base[cur_pop,-1] %in% 1)]))
+            #temp_childern_base <- c(1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+            
+            temp_pop_base <- pop_base[cur_pop,-1]
+            #shortage_facility<-2
+            n_unlocated_node <- length(temp_pop_base[(temp_pop_base %in% 0)])
+            
+            rand_val <- NULL
+            for(m in 1:n_unlocated_node){
+              rand_val <- runif(n_unlocated_node,0,1)
+            }
+            
+            
+            temp_pop_base[!(temp_pop_base %in% 1)] <- rand_val 
+            temp_pop_base[(temp_pop_base %in% 1)] <- NaN
+            
+            add_facility_location <- order(temp_pop_base,decreasing = T)[1:shortage_facility]
+            
+            pop_base[cur_pop,(add_facility_location+1)] <- 1
+            
+            rm(shortage_facility, temp_pop_base, n_unlocated_node,rand_val,add_facility_location)
+            
+          }#if(sum(pop_base[,-1]) < ceiling(sum(Demand$demand)/facility_capacity)){
+          
+        }
+        
+        
+        n <- 1
+        ###pop_base[11,] <- c(11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0)
+        
+        # EVALUATE INITIALL POPULATION
+        
+        ##  각 문제에 해당하는 FUNCTION을 적용하여 Objective Function 계산 및 평가
+        ## i) O -> Hub  배정 (Shortest distance 이용)
+        ## ii) O -> Hub U.E로 최적경로 찾기
+        ## iii) Hub -> D U.E로 최적경로 찾기
+        #n<-11
+        initiall_summary <- foreach(n = 1:n_pop, .combine = rbind, .packages = "data.table") %do%{#(n in 1:nrow(pop_base)){
+          
+          ### SOLVE HUB LOCATION PROBLEM ###
+          
+          ### X : facility locations for each chromosome
+          X <- as.integer(pop_base[n,-1])
+          id <- as.integer(pop_base[n,1])
+          
+          
+          ### STEP 1 : Origin node의 Demand를 Hub(Facility)로 배정
+          #### 각 Chromosome별로 O -> Hub 까지 통행시간을 Convex Combination을 통해 산정하고, 이때 목표지점을 SINK NODE로 하여, 모든 O가 SINK NODE로 수렴할 수 있도록 함
+          # O -> HUB -> SINK NODE
+          
+          
+          ###################SINKNODE 링크에 용량 저장 방법 생각해내야함 -> vdf 활용방안 생각해보기############
+          {
+            facility_assigned <- matrix(nrow = n_node,ncol = n_node)
+            
+            assign_order <- shortest_distance
+            assign_order[,(X %in% 0)] <- NA
+            
+            O_Hub_assigned_table <- matrix(0,nrow = n_node,ncol = n_node)
+            
+            #k<-1
+            #n_order <-1
+            while(sum(facility_assigned,na.rm = T) != sum(Demand$demand)){
+              for(k in 1:n_node){
+                
+                ## Origin node의 Demand를 Hub에 배정 시, Hub의 Capacity를 초과하지 않도록 조건문을 적용시켜줍니다.
+                ### 문제를 간략화하기위해 전체 Demand를를 배정해줍니다.
+                
+                for(n_order in 1:sum(X)){
+                  if((sum(facility_assigned[,which(assign_order[k,] == sort(assign_order[k,])[n_order])[1]],na.rm = T) + sum(Demand[Demand$O==k,'demand'])) <= facility_capacity){
+                    
+                    facility_assigned[k,which(assign_order[k,] == sort(assign_order[k,])[n_order])[1]] <- sum(Demand[Demand$O==k,'demand'])
+                    
+                    O_Hub_assigned_table[k,which(assign_order[k,] == sort(assign_order[k,])[n_order])[1]] <- 1
+                    
+                    break()
+                  }
+                  
+                  
+                }# for(n_order in 1:sum(X)){
+              }#for(k in 1:n_node){
+              
+             ## Capacity 조건을 채우지 못한 Children의 Cromosome에 랜덤한 Facility 1개 더 입지 시킴
+                ### 마지막 cell까지 배정 후, 미배정된 demand가 있으면 Facility 추가
+                
+                if(sum(facility_assigned,na.rm = T) != sum(Demand$demand)){
+                
+                
+                new_X_which <- sample(which(X==0),1)
+                X[new_X_which] <- 1
+                
+                pop_base[n,-1] <- X
+        
+                facility_assigned <- matrix(nrow = n_node,ncol = n_node)
+                
+                assign_order <- shortest_distance
+                assign_order[,(X %in% 0)] <- NA
+                
+                O_Hub_assigned_table <- matrix(0,nrow = n_node,ncol = n_node)
+                
+              }#if(n_order == sum(X)){
+              
+            }
+            
+            facility_assigned_sum <- apply(facility_assigned,MARGIN = 2,FUN = sum,na.rm=T)
+            
+            #hub_id <-1
+            for(hub_id in 1:n_node){
+              Demand$Hub[Demand$O %in% which(O_Hub_assigned_table[,hub_id]!=0)] <-  hub_id
+            }
+            
+            #target_net <- target_net[,c("O","Hub","D","Capacity","Length(Km)","Free_Flow_Time","B","Power","link_status")]
+            
+            
+            ### VALIDATION FOR THE O -> HUB ASSIGNMENT PROCEDURE
+            #### i) 전체 수요 합 동일 여부 ii) 전체 수요 통행배정 완료 여부 iii) Hub별 용량제약 조건 만족 여부
+            if((sum(facility_assigned_sum) - sum(Demand$demand)) > 1 | (sum(O_Hub_assigned_table)!=n_node) | (sum(facility_assigned_sum>facility_capacity)>0)){
+              
+              print("HAS ERROR IN PROCEDURE || O -> HUB ASSIGNMENT ")
+              stop()
+              
+            }
+            
+            
+          }
+          
+          ### STEP2 :CALCULATING TRANSPORTATION COST with U.E 
+          ### U.E를 이용하여 혼잡 비용을 고려한 TRANSPORTATION COST 계산
+          {
+            #### 2-1 : O -> HUB
+            
+            {
+              
+              O_Hub_demand <- aggregate(data = Demand,demand ~ O + Hub,FUN = sum)
+              
+              
+              O_Hub_distance <- O_Hub_demand[,c("O","Hub")]
+              
+              #!!!SHORTESTPATH!!!로 먼저 풀어보기
+              for(d_ohub in 1: nrow(O_Hub_distance)){
+                O_Hub_distance$Distance[d_ohub] <- shortest_distance[O_Hub_distance$O[d_ohub],O_Hub_distance$Hub[d_ohub]]
+              }
+              
+              
+              #opt_link_demand <- Convex_combination(target_net,O_Hub_demand)
+              
+              #opt_link_demand_O_hub <- opt_link_demand    
+              
+              #!!!SHORTESTPATH!!!로 먼저 풀어보기
+              Transportation_cost_O_hub <- O_Hub_demand$demand * O_Hub_distance$Distance * Unit_cost
+              
+              ### (O -> Hub 통행 비용) = (U.E 상태의 링크별 교통량) * (링크별 VDF 통행시간) * (1분당 시간가치)
+              #Transportation_cost_O_hub <- opt_link_demand_O_hub$demand * (target_net$Free_Flow_Time* (1 + target_net$B * ( opt_link_demand_O_hub$demand/ target_net$Capacity)^target_net$Power)) * Unit_cost
+              
+              Sum_Transportation_cost_O_hub <- sum(Transportation_cost_O_hub)
+              #rm(opt_link_demand)
+              
+            }
+            
+            
+            #### 2-2 : HUB -> D
+            ##### -> Uncapacitated fixed charge location problem에서는 제거
+
+            #### 2-3 : Total Transportation_cost O -> Hub & Hub -> D
+            
+            {
+              Total_Transportation_cost <- Sum_Transportation_cost_O_hub
+            }
+            
+          }##Transportation Cost
+          
+          ### STEP3 :CALCULATING CONSTRUCTION COST 
+          ### Construction Cost를 계산
+          ### (총 건설 비용) = (Hub의 개수) * (1개당 건설 비용)
+          {
+            
+            Total_Construction_cost <- sum(X) * Construction_cost
+            
+          }##Construction Cost
+          
+          
+          
+          obj_func  <- Total_Construction_cost + Total_Transportation_cost
+          
+          fitness <- (obj_func)^-1
+          
+          
+          
+          initiall_vector <- t(data.table(X))
+          
+          initiall_vector <- cbind(id,initiall_vector,fitness,Total_Construction_cost,Total_Transportation_cost)
+          #initiall_vector <- Total_Construction_cost
+          #initiall_summary$transportation[n] <- Total_Transportation_cost  
+          
+          return(initiall_vector)
+          
+          
+          rm(Sum_Transportation_cost_O_hub,Total_Construction_cost,Total_Transportation_cost,obj_func,fitness,O_Hub_assigned_table,O_Hub_demand,opt_link_demand_O_hub)
+        }#병렬연산
+        
+        
+        
+        colnames(initiall_summary) <- c(colnames(pop_base),"fitness","construction","transportation")
+        
+        initiall_summary <- as.data.frame(initiall_summary)
+        
+        initiall_summary$prob <- NA
+        initiall_summary$cum_prob <- NA
+        initiall_summary$expected <- NA
+        
+        # 초기 결과테이블 연산
+        
+        sum_fitness <- sum(initiall_summary$fitness)
+        
+        initiall_summary$prob <- initiall_summary$fitness / sum_fitness
+        initiall_summary$cum_prob <- cumsum(initiall_summary$prob)
+        
+        ##Calculate Expected count
+        ##기댓값 구하기
+        initiall_summary$expected <- initiall_summary$prob * n_pop
+        
+        summary <- initiall_summary
+        new_gen <- summary[,!(names(summary) %in% c("prob","cum_prob","expected"))]
+        
+        rm(initiall_summary,pop_base)
+        
+
+        ###################
+        ##Iteration Start##
+        ###################
+        #iter<-1
+        for(iter in 1:n_iter){
+          
+          #SELECTION PART#
+          
+          
+          selection <- data.frame(rep(NA,10))
+          #selection <- cbind(selection,data.frame(rep(NA,10)))
+          colnames(selection) <- c("id")
+          
+          
+          selected_id <- sample(summary$id,size = n_size, prob = summary$prob,replace = T)
+          selection$id <- selected_id
+          #rownames(selection) <- c(1:10)
+          #selection$n_row <- as.integer(row.names(selection))
+          
+          selection <- merge(selection,new_gen,by = "id",sort = F)
+          
+          #Parents summary
+          parents_summary <- selection
+          parents_sum_of_fitness <- sum(parents_summary$fitness)
+          
+          
+          #CROSS-OVER PART#
+          
+          crossover_base <- selection[,!(names(selection) %in% c("fitness","construction","transportation"))]
+          
+          #i=1
+          for(i in 1:nrow(crossover_base)){
+            
+            temp_random <- runif(1)
+            
+            
+            ## One Point Cross-Over
+            ### Set the pair
+            #### Cromosome에서 1개 지점을 기준으로 짝(pair)으로 묶인 다른 Cromosome과 Cross-over해준다
+            if(i <= nrow(crossover_base)/2){
+              crossover_base$pair[i] <- i
+              crossover_base$status[i] <- temp_random
+              crossover_base$point[i] <- sample(2:n_node,1,replace = T)
+            }else if (i > nrow(crossover_base)/2){
+              crossover_base$pair[i] <- crossover_base$pair[nrow(crossover_base)-i+1]
+              crossover_base$status[i] <- crossover_base$status[nrow(crossover_base)-i+1]
+              crossover_base$point[i] <- crossover_base$point[nrow(crossover_base)-i+1]
+            }
+            rm(temp_random)
+          }
+          
+          for(i in 1:nrow(crossover_base)){
+            if(crossover_base$status[i]<=p_crossover){
+              crossover_base$status[i] <-1
+            }else if(crossover_base$status[i]>p_crossover){
+              crossover_base$status[i] <- 0
+            }else{
+              print("HAS ERROR IN CROSS-OVER PART")
+            }
+            
+          }
+          
+          crossover <- crossover_base[,-1]
+          
+          active_cromosome <- crossover[(crossover$status %in% 1),!(names(crossover) %in% c("pair","status","point"))]
+          passive_cromosome <- crossover[(crossover$status %in% 0),!(names(crossover) %in% c("pair","status","point"))]
+          chromosome_status <- crossover[(crossover$status %in% 1),c("pair","status","point")]
+          
+          n_active_chrom <- nrow(active_cromosome)
+          if(sum(crossover$status)!=0){
+            #cur_active_chrom <- 1
+            for(cur_active_chrom in 1:(n_active_chrom/2)){
+              temp_point <- chromosome_status$point[cur_active_chrom]
+              
+              temp_genes_1 <- active_cromosome[cur_active_chrom,(temp_point:n_node)]
+              temp_genes_2 <- active_cromosome[(n_active_chrom - (cur_active_chrom-1)),(temp_point:n_node)]
+              
+              active_cromosome[cur_active_chrom,(temp_point:n_node)] <- temp_genes_2
+              active_cromosome[(n_active_chrom - (cur_active_chrom-1)),(temp_point:n_node)] <- temp_genes_1
+              
+              rm(temp_point,temp_genes_1,temp_genes_2)
+            }
+            
+            crossover <- rbind(active_cromosome,passive_cromosome)
+            rm(cur_active_chrom)
+          }
+          
+          rm(n_active_chrom,crossover_base)
+          
+          
+          #MUTATION PART#
+          
+          mutation_base <- crossover
+          
+          mutation <- as.matrix(mutation_base)
+          
+          m_prob <- runif(ncol(mutation_base)*nrow(mutation_base))
+          m_prob[which(m_prob <= p_mutation)] <- 1
+          m_prob[which((m_prob >= p_mutation)&(m_prob != 1))] <-  0 
+          m_status_table <- matrix(m_prob,nrow = n_pop)
+          
+          mutation[(m_status_table %in% 1)] <- abs(mutation[(m_status_table %in% 1)] -1)
+          
+          mutation <- as.data.frame(mutation)
+          
+          mutation$id <- 1:nrow(mutation)
+          
+          
+          rm(mutation_base,crossover)
+          
+          ## CHILDREN ##
+          
+          children_base <- mutation[,c(ncol(mutation),1:(ncol(mutation)-1))]
+          
+          ### 용량 제약조건 성립 확인
+          for(cur_pop in 1: n_pop){
+            
+            # Valid Capacity Constraint & Add Shortage Number Of Facility
+            # 전체 Demand에 대해 Facility의 Capacity가 부족한 경우, 임의의 Facility를 추가하도록 함
+            
+            if(sum(children_base[cur_pop,-1]) < ceiling(sum(Demand$demand)/facility_capacity)){
+              
+              shortage_facility <- ceiling(sum(Demand$demand)/facility_capacity) - sum(as.matrix(children_base[cur_pop,-1][,(children_base[cur_pop,-1] %in% 1)]))
+              #temp_childern_base <- c(1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+              
+              temp_children_base <- children_base[cur_pop,-1]
+              #shortage_facility<-2
+              n_unlocated_node <- length(temp_children_base[cur_pop,(temp_children_base %in% 0)])
+              
+              rand_val <- NULL
+              for(m in 1:n_unlocated_node){
+                rand_val <- runif(n_unlocated_node,0,1)
+              }
+              
+              
+              temp_children_base[,!(temp_children_base %in% 1)] <- rand_val 
+              temp_children_base[,(temp_children_base %in% 1)] <- NaN
+              
+              add_facility_location <- order(temp_children_base,decreasing = T)[1:shortage_facility]
+              
+              children_base[cur_pop,(add_facility_location+1)] <- 1
+              
+              rm(shortage_facility, temp_children_base, n_unlocated_node,rand_val,add_facility_location)
+              
+            }#if(sum(children_base[,-1]) < ceiling(sum(Demand$demand)/facility_capacity)){
+            
+          }
+          
+          # EVALUATE CHILDREN POPULATION
+          ##  각 문제에 해당하는 FUNCTION을 적용하여 Objective Function 계산 및 평가
+          ## i) O -> Hub  배정 (Shortest distance 이용)
+          ## ii) O -> Hub U.E로 최적경로 찾기
+          ## iii) Hub -> D U.E로 최적경로 찾기
+          #n<-3
+          children_summary <- foreach(n = 1:n_pop, .combine = rbind, .packages = "data.table") %do%{#(n in 1:nrow(children_base)){
+            
+            ### SOLVE HUB LOCATION PROBLEM ###
+
+            ### X : facility locations for each chromosome
+            X <- as.integer(children_base[n,!(names(children_base)  %in% c("id","status","pair","point"))])
+            id <- as.integer(children_base[n,1])
+            
+            ### STEP 1 : Origin node의 Demand를 Hub(Facility)로 배정
+            #### 배정시, Origin node의 최단거리에 위치한 Hub를 우선으로 함
+            {
+              facility_assigned <- matrix(nrow = n_node,ncol = n_node)
+              
+              assign_order <- shortest_distance
+              assign_order[,(X %in% 0)] <- NA
+              
+              O_Hub_assigned_table <- matrix(0,nrow = n_node,ncol = n_node)
+              
+              #k<-1
+              
+              while(sum(facility_assigned,na.rm = T) != sum(Demand$demand)){
+                for(k in 1:n_node){
+                  
+                  ## Origin node의 Demand를 Hub에 배정 시, Hub의 Capacity를 초과하지 않도록 조건문을 적용시켜줍니다.
+                  ### 문제를 간략화하기위해 전체 Demand를를 배정해줍니다.
+                  
+                  ### 1개 허브에 대해 이미 있는 배정 통행량 + 배정 예정 통행량 > 허브 용량이면 다른 곳으로 배정
+                  
+                  for(n_order in 1:sum(X)){
+                    if((sum(facility_assigned[,which(assign_order[k,] == sort(assign_order[k,])[n_order])[1]],na.rm = T) + sum(Demand[Demand$O==k,'demand'])) <= facility_capacity){
+                      
+                      facility_assigned[k,which(assign_order[k,] == sort(assign_order[k,])[n_order])[1]] <- sum(Demand[Demand$O==k,'demand'])
+                      
+                      O_Hub_assigned_table[k,which(assign_order[k,] == sort(assign_order[k,])[n_order])[1]] <- 1
+                      
+                      break()
+                      
+                    }
+                  }#for(n_order in 1:sum(X)){      
+                }#for(k in 1:n_node){
+                
+                #sum(facility_assigned,na.rm = T)
+                
+                ## Capacity 조건을 채우지 못한 Children의 Cromosome에 랜덤한 Facility 1개 더 입지 시킴
+                ### 마지막 cell까지 배정 후, 미배정된 demand가 있으면 Facility 추가
+                
+                if(sum(facility_assigned,na.rm = T) != sum(Demand$demand)){
+                  
+                  new_X_which <- sample(which(X==0),1)
+                  X[new_X_which] <- 1
+                  
+                  children_base[n,!(names(children_base)  %in% c("id","status","pair","point"))] <- X
+
+                  
+                  facility_assigned <- matrix(nrow = n_node,ncol = n_node)
+                  
+                  assign_order <- shortest_distance
+                  assign_order[,(X %in% 0)] <- NA
+                  
+                  O_Hub_assigned_table <- matrix(0,nrow = n_node,ncol = n_node)
+                  
+                }#if(n_order == sum(X)){
+              }#whilie(sum(facility_assigned,na.rm = T) != sum(Demand$demand)){
+              
+              
+              facility_assigned_sum <- apply(facility_assigned,MARGIN = 2,FUN = sum,na.rm=T)
+              
+              
+              ## ASSIGN DEMAND O -> HUB
+              
+              #hub_id <-1
+              for(hub_id in 1:n_node){
+                Demand$Hub[Demand$O %in% which(O_Hub_assigned_table[,hub_id]!=0)] <-  hub_id
+              }
+
+              
+              #target_net <- target_net[,c("O","Hub","D","Capacity","Length(Km)","Free_Flow_Time","B","Power","link_status")]
+              
+              
+              ### VALIDATION FOR THE O -> HUB ASSIGNMENT PROCEDURE
+              #### i) 전체 수요 합 동일 여부 ii) 전체 수요 통행배정 완료 여부 iii) Hub별 용량제약 조건 만족 여부
+              if((sum(facility_assigned_sum) - sum(Demand$demand)) > 1 | (sum(O_Hub_assigned_table)!=n_node) | (sum(facility_assigned_sum>facility_capacity)>0)){
+                
+                print("HAS ERROR IN PROCEDURE || O -> HUB ASSIGNMENT ")
+                stop()
+              }
+              
+              
+            }
+            
+            ### STEP2 :CALCULATING TRANSPORTATION COST with U.E 
+            ### U.E를 이용하여 혼잡 비용을 고려한 TRANSPORTATION COST 계산
+            {
+              #### 2-1 : O -> HUB
+              
+              {
+                
+                O_Hub_demand <- aggregate(data = Demand,demand ~ O + Hub,FUN = sum)
+                
+                
+                O_Hub_distance <- O_Hub_demand[,c("O","Hub")]
+                
+                #!!!SHORTESTPATH!!!로 먼저 풀어보기
+                for(d_ohub in 1: nrow(O_Hub_distance)){
+                  O_Hub_distance$Distance[d_ohub] <- shortest_distance[O_Hub_distance$O[d_ohub],O_Hub_distance$Hub[d_ohub]]
+                }
+                
+                
+                #opt_link_demand <- Convex_combination(target_net,O_Hub_demand)
+                
+                #opt_link_demand_O_hub <- opt_link_demand    
+                
+                #!!!SHORTESTPATH!!!로 먼저 풀어보기
+                Transportation_cost_O_hub <- O_Hub_demand$demand * O_Hub_distance$Distance * Unit_cost
+                
+                ### (O -> Hub 통행 비용) = (U.E 상태의 링크별 교통량) * (링크별 VDF 통행시간) * (1분당 시간가치)
+                #Transportation_cost_O_hub <- opt_link_demand_O_hub$demand * (target_net$Free_Flow_Time* (1 + target_net$B * ( opt_link_demand_O_hub$demand/ target_net$Capacity)^target_net$Power)) * Unit_cost
+                
+                Sum_Transportation_cost_O_hub <- sum(Transportation_cost_O_hub)
+                #rm(opt_link_demand)
+                
+              }
+              
+              
+              #### 2-2 : HUB -> D
+              #### -> UCFL에서 제거거
+              
+              #### 2-3 : Total Transportation_cost O -> Hub & Hub -> D
+              
+              {
+                Total_Transportation_cost <- Sum_Transportation_cost_O_hub
+              }
+              
+            }##Transportation Cost
+            
+            ### STEP3 :CALCULATING CONSTRUCTION COST 
+            ### Construction Cost를 계산
+            ### (총 건설 비용) = (Hub의 개수) * (1개당 건설 비용)
+            {
+              
+              Total_Construction_cost <- sum(X) * Construction_cost
+              
+            }##Construction Cost
+            
+            
+            
+            obj_func  <- Total_Construction_cost + Total_Transportation_cost
+            
+            fitness <- (obj_func)^-1
+            
+            
+            
+            initiall_vector <- t(data.table(X))
+            
+            initiall_vector <- cbind(id,initiall_vector,fitness,Total_Construction_cost,Total_Transportation_cost)
+
+            
+            #initiall_vector <- Total_Construction_cost
+            #initiall_summary$transportation[n] <- Total_Transportation_cost  
+            
+            return(initiall_vector)
+            
+            
+            rm(Sum_Transportation_cost_O_hub,Total_Construction_cost,Total_Transportation_cost,obj_func,fitness,O_Hub_assigned_table,O_Hub_demand)
+          }#병렬연산
+          
+          
+          ### 병렬계산된 Children summary에 열 이름 부여
+          colnames(children_summary) <- c(colnames(children_base)[!colnames(children_base) %in% c("pair","status","point")],"fitness","construction","transportation")
+          
+          children_summary <- as.data.frame(children_summary)
+          
+          rm(mutation, children_base)  
+          
+          # Evaluation #
+          
+          ## CHOOSE PARANTS FOR NEW GENERATION
+          
+          total_summary <- rbind(parents_summary,children_summary)
+          total_summary <- total_summary[order(total_summary$fitness,decreasing = T),]
+          
+          top10_summary <- total_summary[1:n_size,]
+          
+          top10_sum_of_fitness <- sum(top10_summary$fitness)
+          
+          
+          
+          ##Calculate Optimal chromosome of Itertaion
+          iter_best_fitness <- max(top10_summary$fitness)
+          iter_avg_fitness <- mean(top10_summary$fitness)
+          
+          iter_best_fitness_which <- which( top10_summary$fitness == iter_best_fitness)[1]
+          iter_best_facility <- top10_summary[which(top10_summary$fitness==min(top10_summary$fitness))[iter_best_fitness_which],X_list]
+          
+          iter_best_facility <- paste0(node_Nm[iter_best_facility==1],collapse = ",")
+          
+          iter_best_construction <- top10_summary$construction[iter_best_fitness_which]
+          iter_best_transportation <- top10_summary$transportation[iter_best_fitness_which]
+        
+          
+          
+          ### 각 Iteration별 Best Fitness와 현재까지 Best Fitness를 비교해서 가장 좋은 값을 저장
+          if(local_best_fitness >= iter_best_fitness){
+            
+            local_best_fitness <- local_best_fitness  
+            local_best_facility <- local_best_facility
+            local_best_construction <- local_best_construction
+            local_best_transportation <- local_best_transportation
+            
+          }else if(local_best_fitness < iter_best_fitness){
+            local_best_fitness <- iter_best_fitness
+            
+            local_best_facility <- iter_best_facility
+            local_best_construction <- iter_best_construction
+            local_best_transportation <- iter_best_transportation
+            
+          }
+          
+          #Write best fitness, facility location table at every iteration
+          
+          temp_optimal_table[iter,] <- local_best_fitness
+          temp_fitness_table[iter,] <- iter_avg_fitness
+          temp_facility_table[iter,] <- local_best_facility
+          temp_construction_cost_table[iter,] <- local_best_construction
+          temp_transportation_cost_table[iter,] <- local_best_transportation
+          
+          #CALCULATE TIME DIFFERENCE
+          end_time <- Sys.time()
+          
+          if(difftime(end_time,start_time,units = "secs") >= time_limit){
+            break
+          }
+          
+          temp_computationtime_table[iter,] <- as.integer(difftime(time1 = end_time, time2 = start_time,units = "secs"))
+          
+          
+          ## REPLACE ORIGIN PARNETS TO NEW CHILDREN
+          {     
+            newgen_summary <- top10_summary
+            
+            newgen_summary$prob <- NA
+            newgen_summary$cum_prob <- NA
+            newgen_summary$expected <- NA
+            
+            # SELECTION을 위한 사전작업
+            
+            sum_fitness <- sum(newgen_summary$fitness)
+            
+            newgen_summary$prob <- newgen_summary$fitness / sum_fitness
+            newgen_summary$cum_prob <- cumsum(newgen_summary$prob)
+            
+            ##Calculate Expected count
+            ##기댓값 구하기
+            newgen_summary$expected <- newgen_summary$prob * n_pop
+            
+          }
+          
+          rm(summary)
+          
+          summary <- newgen_summary
+          summary$id <- 1:n_size
+          
+          new_gen <- summary[,!(names(summary) %in% c("prob","cum_prob","expected"))]
+          
+          rm(total_summary,top10_summary,children_summary,parents_summary,m_status_table,newgen_summary,selection,parents_sum_of_fitness,top10_sum_of_fitness,selected_id,iter_best_fitness,iter_avg_fitness,iter_best_facility,iter_best_construction,iter_best_transportation)
+          
+          
+          
+          
+          
+          ##############################################################
+          #LOCAL SEARCH (NEIGHBORHOOD SEARCH)###########################
+          ##############################################################
+          
+          #COMPARE MINIMUN PARANTS FITNESS VS CHILDREN FITNESS
+          
+          
+        }#for(iter in 1:n_iter){
+        
+        
+        #################
+        ##Iteration End##
+        #################
+        
+        colnames(temp_optimal_table) <- paste0("run",runs)
+        colnames(temp_fitness_table) <- paste0("run",runs)
+        colnames(temp_facility_table) <- paste0("run",runs)
+        colnames(temp_construction_cost_table) <- paste0("run",runs)
+        colnames(temp_transportation_cost_table) <- paste0("run",runs)
+        colnames(temp_computationtime_table) <- paste0("run",runs)
+        
+        optimal_table <- cbind(optimal_table,temp_optimal_table)
+        fitness_table <- cbind(fitness_table,temp_fitness_table)
+        facility_table <- cbind(facility_table,temp_facility_table)
+        construction_cost_table <- cbind(construction_cost_table,temp_construction_cost_table)
+        transportation_cost_table <- cbind(transportation_cost_table,temp_transportation_cost_table)
+        computationtime_table <- cbind(computationtime_table,temp_computationtime_table)
+        
+        #if(runs%%5==1){
+        #  
+        #  saveRDS(optimal_table,file = paste0(chk_path,net_Nm[n_net],'-chk_pt_optimal-',runs,'.RDS'))
+        #  write.csv(Compute_time, file = paste0(chk_path,net_Nm[n_net],'-chk_pt_compute_time-',runs,'.csv'))
+        #}
+        
+        
+        Compute_time <- c(Compute_time,Sys.time())
+        print(paste0('Run : ',runs,'/',n_runs, ' : ',Sys.time()))
+        
+        #tail(fitness_table)
+        #tail(facility_table)
+        #tail(construction_cost_table)
+        #tail(transportation_cost_table)
+        
+        rm(temp_fitness_table)
+        
+      }#RUN
+      
+      ############
+      ##Runs End##
+      ############
+      
+      result_optimal <- optimal_table[,-1]
+      result_fitness <- fitness_table[,-1]
+      result_facility <- facility_table[,-1]
+      result_construction <- construction_cost_table[,-1]
+      result_transportation <- transportation_cost_table[,-1]
+      result_computation <- computationtime_table[,-1]
+      #tail(result_fitness)
+      #tail(result_facility)
+      #tail(result_construction)
+      #tail(result_transportation)
+      
+      for(i in 1:nrow(result_optimal)){
+        result_optimal$max[i] <- max(result_optimal[i,1:n_runs])
+        result_optimal$min[i] <- min(result_optimal[i,1:n_runs])
+        result_optimal$avg[i] <- mean(as.numeric(result_optimal[i,1:n_runs]))
+        
+        result_fitness$max[i] <- max(result_fitness[i,1:n_runs])
+        result_fitness$min[i] <- min(result_fitness[i,1:n_runs])
+        result_fitness$avg[i] <- mean(as.numeric(result_fitness[i,1:n_runs]))
+      }
+      
+      result_optimal_obj <- result_optimal[,1:n_runs]^-1
+      result_optimal_obj$avg <- apply(result_optimal_obj,MARGIN = 1,FUN = mean)
+      
+      result_construction$avg <- apply(result_construction,MARGIN = 1,FUN = mean)
+      result_transportation$avg <- apply(result_transportation,MARGIN = 1,FUN = mean)
+      result_computation$avg <- apply(result_computation,MARGIN = 1,FUN = mean)
+      
+      saveRDS(result_optimal,file = paste0(rds_path,"optimal-SGA-",net_Nm[n_net],"-Pc",Pc_list[Pc],"Pm",Pm_list[Pm],"CC",Construction_cost,"UT",Unit_cost,"-",sdate,".RDS"))
+      saveRDS(result_optimal_obj,file = paste0(rds_path,"obj_function-SGA-",net_Nm[n_net],"-Pc",Pc_list[Pc],"Pm",Pm_list[Pm],"CC",Construction_cost,"UT",Unit_cost,"-",sdate,".RDS"))
+      
+      saveRDS(result_computation,file = paste0(rds_path,"computation-SGA-",net_Nm[n_net],"-Pc",Pc_list[Pc],"Pm",Pm_list[Pm],"CC",Construction_cost,"UT",Unit_cost,"-",sdate,".RDS"))
+      saveRDS(result_fitness,file = paste0(rds_path,"avgfitness-SGA-",net_Nm[n_net],"-Pc",Pc_list[Pc],"Pm",Pm_list[Pm],"CC",Construction_cost,"UT",Unit_cost,"-",sdate,".RDS"))
+      saveRDS(result_facility,file = paste0(rds_path,"facility-SGA-",net_Nm[n_net],"-Pc",Pc_list[Pc],"Pm",Pm_list[Pm],"CC",Construction_cost,"UT",Unit_cost,"-",sdate,".RDS"))
+      saveRDS(result_construction,file = paste0(rds_path,"constructioncost-SGA-",net_Nm[n_net],"-Pc",Pc_list[Pc],"Pm",Pm_list[Pm],"CC",Construction_cost,"UT",Unit_cost,"-",sdate,".RDS"))
+      saveRDS(result_transportation,file = paste0(rds_path,"transportationcost-SGA-",net_Nm[n_net],"-Pc",Pc_list[Pc],"Pm",Pm_list[Pm],"CC",Construction_cost,"UT",Unit_cost,"-",sdate,".RDS"))
+      
+      print(paste0("Pc",Pc_list[Pc]," Pm",Pm_list[Pm],"CC",Construction_cost,"UT",Unit_cost," : ",Sys.time()))
+    }#Pm
+  }#Pc
+  #  }
+}#C.C
+
+
+
+#png(filename = paste0(output_path,'SGA-',net_Nm[n_net],"-PC",Pc_list[Pc],"PM",Pm_list[Pm],"-",sdate,".png"),height=440 , width= 800)
+#{
+result_transportation[sum(!is.na(result_transportation$avg)),]
+plot(x= result_computation$avg, y= result_optimal$avg,type = 'l',main = paste0("SGA - Pc : ",Pc_list[Pc]," Pm : ",Pm_list[Pm]),
+     xlab="Number of iteration",ylab="Average Fitness",lwd=2)
+lines(x= result_computation$run1, y= result_transportation$run3,type = 'l')
+
+abline(h=min(Pc0.9Pm0.05_optimal$avg),col = "forestgreen", lwd=2,lty=2)
+dev.off()
+#ymax <- max(Pc0.9Pm0.05_optimal$avg)
+#ymax <- signif(ymax,digits = 0)
+
+#  x_list <- seq(from = 0, to = n_iter,by = 100)
+#  y_list <- seq(from = 0, to = 1000000,by = 25000)
+#  
+#  for(ab in 1:length(x_list)){
+#    abline(v= x_list[ab],col = 'grey70', lwd=1, lty=2)
+#  }
+
+#  for(ab in 1:length(y_list)){
+#    abline(h= y_list[ab],col = 'grey50', lwd=1, lty=2)
+#  }
+
+
+#  text(x=100, y= Pc0.9Pm0.05_optimal$avg[1]*0.99, labels = Pc0.9Pm0.05_optimal$avg[1],cex=1.2)
+#  text(x=100, y= Pc0.9Pm0.05_optimal$avg[nrow(Pc0.9Pm0.05_optimal)]*1.01, labels = Pc0.9Pm0.05_optimal$avg[nrow(Pc0.9Pm0.05_optimal)],col = "forestgreen",cex = 1.2)
+
+#}
+#dev.off()
+
