@@ -1,0 +1,58 @@
+[
+  {
+    "objectID": "sample_file.html",
+    "href": "sample_file.html",
+    "title": "Project Information",
+    "section": "",
+    "text": "Source"
+  },
+  {
+    "objectID": "sample_file.html#addig-cross-reference-to-table",
+    "href": "sample_file.html#addig-cross-reference-to-table",
+    "title": "Project Information",
+    "section": "addig cross reference to table",
+    "text": "addig cross reference to table\nTable 1 cross referencing here\n\n\n\n\nTable 1: First 10 Penguins\n\n\n\n\n\n\nspecies\nisland\nbill_length_mm\nbill_depth_mm\nflipper_length_mm\nbody_mass_g\nsex\nyear\n\n\n\n\nAdelie\nTorgersen\n39.1\n18.7\n181\n3750\nmale\n2007\n\n\nAdelie\nTorgersen\n39.5\n17.4\n186\n3800\nfemale\n2007\n\n\nAdelie\nTorgersen\n40.3\n18.0\n195\n3250\nfemale\n2007\n\n\nAdelie\nTorgersen\nNA\nNA\nNA\nNA\nNA\n2007\n\n\nAdelie\nTorgersen\n36.7\n19.3\n193\n3450\nfemale\n2007\n\n\nAdelie\nTorgersen\n39.3\n20.6\n190\n3650\nmale\n2007"
+  },
+  {
+    "objectID": "sample_file.html#adding-cross-reference-to-figure",
+    "href": "sample_file.html#adding-cross-reference-to-figure",
+    "title": "Project Information",
+    "section": "adding cross reference to figure",
+    "text": "adding cross reference to figure\nAdding cross reference: Figure 1 requires including the following two information - fig next to label in the code chunk - and adding fig-cap\n\n\nWarning: Removed 2 rows containing missing values or values outside the scale range\n(`geom_point()`).\n\n\n\n\n\n\n\n\nFigure 1: A scatterplot of penguins’ bill depth and length, colored by species of penguins"
+  },
+  {
+    "objectID": "sample_file.html#inserting-citation",
+    "href": "sample_file.html#inserting-citation",
+    "title": "Project Information",
+    "section": "inserting citation",
+    "text": "inserting citation\nFor this analysis we’ll use the penguins dataset from the palmerpenguins package."
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Project Information",
+    "section": "",
+    "text": "Source"
+  },
+  {
+    "objectID": "index.html#addig-cross-reference-to-table",
+    "href": "index.html#addig-cross-reference-to-table",
+    "title": "Project Information",
+    "section": "addig cross reference to table",
+    "text": "addig cross reference to table\nTable 1 cross referencing here\n\n\n\n\nTable 1: First 10 Penguins\n\n\n\n\n\n\nspecies\nisland\nbill_length_mm\nbill_depth_mm\nflipper_length_mm\nbody_mass_g\nsex\nyear\n\n\n\n\nAdelie\nTorgersen\n39.1\n18.7\n181\n3750\nmale\n2007\n\n\nAdelie\nTorgersen\n39.5\n17.4\n186\n3800\nfemale\n2007\n\n\nAdelie\nTorgersen\n40.3\n18.0\n195\n3250\nfemale\n2007\n\n\nAdelie\nTorgersen\nNA\nNA\nNA\nNA\nNA\n2007\n\n\nAdelie\nTorgersen\n36.7\n19.3\n193\n3450\nfemale\n2007\n\n\nAdelie\nTorgersen\n39.3\n20.6\n190\n3650\nmale\n2007"
+  },
+  {
+    "objectID": "index.html#adding-cross-reference-to-figure",
+    "href": "index.html#adding-cross-reference-to-figure",
+    "title": "Project Information",
+    "section": "adding cross reference to figure",
+    "text": "adding cross reference to figure\nAdding cross reference: Figure 1 requires including the following two information - fig next to label in the code chunk - and adding fig-cap\n\n\nWarning: Removed 2 rows containing missing values or values outside the scale range\n(`geom_point()`).\n\n\n\n\n\n\n\n\nFigure 1: A scatterplot of penguins’ bill depth and length, colored by species of penguins"
+  },
+  {
+    "objectID": "index.html#inserting-citation",
+    "href": "index.html#inserting-citation",
+    "title": "Project Information",
+    "section": "inserting citation",
+    "text": "inserting citation\nFor this analysis we’ll use the penguins dataset from the palmerpenguins package."
+  }
+]

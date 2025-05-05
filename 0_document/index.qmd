@@ -1,0 +1,68 @@
+---
+title: "Project Information"
+format:
+  html:
+    toc: true
+    html-math-method: katex
+    css: style.css  
+    theme:
+      light: cosmo
+      dark: [cosmo, theme-dark.scss]
+execute: 
+   echo: false
+editor_options: 
+  chunk_output_type: console
+---
+
+[Source](https://quarto.org/docs/get-started/hello/rstudio.html)
+
+```{=html}
+<style>
+.table-hover > tbody > tr:hover { 
+  background-color: #f4f442;
+}
+</style>
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| include: false
+library(here)
+source(here("source","get_lib.R"))
+```
+
+## addig cross reference to table
+
+@tbl-penguins-top10 cross referencing here
+
+```{r}
+#| label: tbl-penguins-top10
+#| tbl-cap: First 10 Penguins 
+
+head(penguins) %>% kable("html") %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## adding cross reference to figure
+
+Adding cross reference: @fig-bill-dims-species requires including the following two information - `fig` next to `label` in the code chunk - and adding `fig-cap`
+
+```{r}
+#| label: fig-bill-dims-species
+#| fig-width: 8
+#| fig-asp: 0.618
+#| fig-cap: |
+#|  A scatterplot of penguins' bill depth and length, colored by species of penguins
+
+penguins %>% ggplot(aes(x=bill_length_mm,  y = bill_depth_mm, 
+                        color = species, shape = species)) + 
+    geom_point() +
+    scale_color_colorblind() +
+    labs(x = "Bill Length (mm)", y = "Bill Depth (mm)")
+
+```
+
+## inserting citation
+
+For this analysis we'll use the penguins dataset from the palmerpenguins package.
